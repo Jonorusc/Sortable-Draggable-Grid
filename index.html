@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Sortable Draggable Grid</title>
+    <meta charset="UTF-8" />
+
+    <style>
+      #content {
+        width: 300px;
+        position: relative;
+        padding: 0.5rem;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      #content div {
+        display: inline-block;
+        text-align: center;
+        width: 64px;
+        height: 64px;
+        background: blueviolet;
+        display: grid;
+        place-items: center;
+        position: absolute;
+        color: #f2f2f2;
+        transition: all 0.5s ease-in-out;
+        border-radius: 0.6rem;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="content">
+      <div>APP 1</div>
+      <div>APP 2</div>
+      <div>APP 3</div>
+      <div>APP 4</div>
+      <div>APP 5</div>
+      <div>APP 6</div>
+      <div>APP 7</div>
+      <div>APP 8</div>
+      <div>APP 9</div>
+      <div>APP 10</div>
+      <div>APP 11</div>
+    </div>
+
+    <script>
+      "use strict";
+
+      let target = {
+        element: null,
+        index: null
+      };
+
+      let input = {
+        lastPointer: { x: null, y: null }
+      };
+
+      let swapping = false;
+      let dragging = false;
+
+      // inserting rules in html
+      document.styleSheets[0].insertRule(`
+        * {
+          user-select: none;
+          -webkit-user-select: none;
+        }
+      `);
+
+      const grid = document.getElementById("content");
+      let elements = [...grid.children];
+
+      function createGrid(
+        data = elements,
+        columns = 4,
+        elementSize = 64,
+        gap = 15
+      ) {
+        data.forEach((item, i) => {
+          const pos = {
+            x: i % columns,
+            y: Math.floor(i / columns)
+          };
+          item.dataset.index = i;
+          item.style.top = `${pos.y * (elementSize + gap)}px`;
+          item.style.left = `${pos.x * (elementSize + gap)}px`;
+          item.style.width = `calc(${100 / columns}% - ${gap}px)`;
+          item.style.height = `calc(${elementSize}px - ${gap / 10}px)`;
+          item.style.boxSizing = "border-box";
+        });
+      }
+
+      createGrid();
+
+      // adding styles in the page
+      document.styleSheets[0].insertRule(`#${grid.id} .opacity {
+        color: #f2f2f290;
+        opacity: 0.8;
+      }`);
+
+      function reInsert(arr, from, to) {
+        const reinsertedElements = arr.slice(0);
+        const val = reinsertedElements[from];
+        reinsertedElements.splice(from, 1);
+        reinsertedElements.splice(to, 0, val);
+        // recreate app grid
+        createGrid(reinsertedElements);
+        // restores element data
+        elements = [...reinsertedElements];
+      }
+
+      function resetTarget() {
+        target = { element: null, index: null };
+      }
+
+      // utility function to get the item that's being overed by cursor
+      function hitTest(mouseX, mouseY) {
+        const element = document.elementFromPoint(mouseX, mouseY);
+
+        if (!element !== null && !element.dataset.index) return null;
+        // is a valid element
+        return {
+          node: element,
+          index: parseInt(element.dataset.index, 10)
+        };
+      }
+
+      // utility function to change the cursor while the element is being dragged
+      function cursorStyle(target, hittest) {
+        document.styleSheets[0].deleteRule(1);
+        const cursorGrabbing = `
+          cursor: grabbing;
+          -webkit-cursor: grabbing;
+          -moz-cursor: grabbing;
+          -ms-cursor: grabbing;
+          -o-cursor: grabbing;
+        `;
+
+        const cursor = target
+          ? cursorGrabbing
+          : hittest
+          ? "cursor: grab "
+          : "cursor: auto";
+
+        // i have to use the * selector because of the target.element.style.pointsEvents as none
+        // that's why i'm using insertRule instead of styling the document.body
+        document.styleSheets[0].insertRule(`* {${cursor}}`, 1);
+      }
+
+      function getPointer(event) {
+        const isTouch = event.type === "touchstart";
+
+        const x = isTouch ? event.touches[0].pageX : event.pageX;
+        const y = isTouch ? event.touches[0].pageY : event.pageY;
+
+        return { x, y, isTouch };
+      }
+
+      elements.forEach((element, index) => {
+        element.addEventListener("touchstart", ondragstart);
+        element.addEventListener("mousedown", ondragstart);
+      });
+
+      function ondragstart(event) {
+        event.preventDefault();
+        const pointer = getPointer(event);
+
+        // get the element target
+        const hittest = hitTest(pointer.x, pointer.y);
+
+        target = {
+          element: hittest.node,
+          index: hittest.index
+        };
+
+        // get the last pointer
+        const rect = target.element.getBoundingClientRect();
+
+        input.lastPointer = {
+          x: pointer.x - rect.left,
+          y: pointer.y - rect.top
+        };
+
+        target = {
+          ...target,
+          rect
+        };
+
+        let isPressed = true;
+
+        // add a mouseleave listener to the element being dragged to clear dragging state
+        target.element.addEventListener(
+          "mouseleave",
+          () => (isPressed = false)
+        );
+
+        setTimeout(() => {
+          try {
+            if (isPressed) {
+              dragging = true;
+
+              // adding the listeners for moving
+              window.addEventListener(
+                pointer.isTouch ? "touchmove" : "mousemove",
+                onDrag,
+                true
+              );
+              window.addEventListener(
+                pointer.isTouch ? "touchend" : "mouseup",
+                onDragEnd,
+                true
+              );
+
+              target.element.removeEventListener("mouseleave", onDragEnd);
+              elementsOpacity();
+            } else {
+              resetTarget();
+            }
+          } catch (error) {
+            return;
+          }
+        }, 500);
+      }
+
+      function elementsOpacity(state = true) {
+        elements.forEach((app) => {
+          if (parseInt(app.dataset.index, 10) !== target.index) {
+            state
+              ? app.classList.add("opacity")
+              : app.classList.remove("opacity");
+          }
+        });
+      }
+
+      function onDrag(event) {
+        event.preventDefault();
+
+        try {
+          // get clientX and clientY
+          const pointer = getPointer(event);
+
+          // have certain that the cursor is grabbing
+          cursorStyle(target.element, hitTest(pointer.x, pointer.y));
+
+          if (target.element === null || !dragging) {
+            //!dragging guarantees us that we've got a target element
+            onDragEnd(event);
+            return;
+          }
+
+          // element moving
+          target.element.style.transition = "unset";
+          target.element.style.pointerEvents = "none";
+          target.element.style.zIndex = "2";
+
+          let gridOffsetX = target.rect.left - target.element.offsetLeft;
+          let gridOffsetY = target.rect.top - target.element.offsetTop;
+
+          let mouseX = pointer.x - input.lastPointer.x;
+          let mouseY = pointer.y - input.lastPointer.y;
+
+          let deltaX = mouseX - target.element.offsetLeft - gridOffsetX;
+          let deltaY = mouseY - target.element.offsetTop - gridOffsetY;
+
+          target.element.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) scale(0.9)`;
+
+          onElementOver(event, hitTest(pointer.x, pointer.y));
+        } catch (error) {
+          onDragEnd(event);
+          return;
+        }
+      }
+
+      // elementOvered = {  node: element, index }
+      function onElementOver(event, elementOvered) {
+        if (
+          !swapping &&
+          elementOvered !== null &&
+          elementOvered.index !== target.index
+        ) {
+          swapping = true;
+          reInsert(elements, target.index, elementOvered.index);
+          // update target.index
+          target = {
+            ...target,
+            index: elementOvered.index
+          };
+
+          // update the lastPointer
+          const pointer = getPointer(event);
+          input.lastPointer = {
+            x: pointer.x - target.rect.left,
+            y: pointer.y - target.rect.top
+          };
+
+          setTimeout(() => {
+            swapping = false;
+          }, 350);
+        }
+      }
+
+      function onDragEnd(event) {
+        event.preventDefault();
+
+        const pointer = getPointer(event);
+
+        if (!dragging) return;
+
+        dragging = false;
+
+        window.removeEventListener(
+          pointer.isTouch ? "touchmove" : "mousemove",
+          onDrag
+        );
+        window.removeEventListener(
+          pointer.isTouch ? "touchend" : "mouseup",
+          onDragEnd
+        );
+
+        target.element.style.transition = "transform 0.3s ease-in-out";
+        target.element.style.transform = "unset";
+        target.element.style.pointerEvents = "auto";
+        target.element.style.zIndex = "unset";
+        resetTarget();
+        elementsOpacity(false);
+      }
+    </script>
+  </body>
+</html>
