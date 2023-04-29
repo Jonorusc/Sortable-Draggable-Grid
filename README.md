@@ -5,7 +5,7 @@ This simple code lets you sort elements on the grid while dragging
 
 See the complete code in codesandbox: https://codesandbox.io/s/iphone-group-apps-animation-txwkwl
 
-# An overvew of how it works
+# An overview of how it works
 
 This is a script that handles the drag and drop functionality for a mobile app grid. The grid is created with a function createGrid() which takes an array of elements as input and positions them in a grid layout. The function sets the top, left, width, and height styles of each element based on its position in the grid.
 
